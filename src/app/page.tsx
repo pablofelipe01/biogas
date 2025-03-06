@@ -18,13 +18,13 @@ function LoginForm({ onLogin }: { onLogin: (name: string) => void }) {
       setError('Por favor, introduce un nombre válido')
       return
     }
-    onLogin(name.trim())
+    onLogin(name)
   }
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       <div className="bg-blue-500 text-white p-3 flex items-center">
-        <h1 className="text-xl font-bold">BioGas Agentic</h1>
+        <h1 className="text-xl font-bold">BioGasAgentic</h1>
       </div>
 
       <div className="flex-1 flex justify-center items-center p-4">
@@ -32,13 +32,13 @@ function LoginForm({ onLogin }: { onLogin: (name: string) => void }) {
           <h2 className="text-2xl mb-6 text-center font-bold text-gray-800">Bienvenido al chat</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
-              <label className="block text-gray-800 font-medium mb-2">Nombre:</label>
+              <label className="block text-gray-800 font-medium mb-2">Tu nombre:</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full p-2 border rounded-lg text-gray-800"
-                placeholder="Ingresa tu nombre"
+                placeholder="Tu nombre"
                 required
               />
               {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
@@ -83,55 +83,74 @@ export default function ChatPage() {
     setMessages([])
   }
 
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isLoading) return
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          const base64 = reader.result.split(',')[1] || ''
+          resolve(base64)
+        } else {
+          reject(new Error('No se pudo convertir blob a base64'))
+        }
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  const handleSendMessage = async (text: string, audioBlob?: Blob) => {
+    if ((!text.trim() && !audioBlob) || isLoading) return
     setIsLoading(true)
 
-    const newUserMessage: Message = {
-      type: 'text',
-      sender: 'user',
-      content: text,
-      timestamp: new Date()
+    let newUserMessage: Message
+    if (audioBlob) {
+      const audioUrl = URL.createObjectURL(audioBlob)
+      newUserMessage = {
+        type: 'audio',
+        sender: 'user',
+        content: '',
+        audioUrl,
+        timestamp: new Date()
+      }
+    } else {
+      newUserMessage = {
+        type: 'text',
+        sender: 'user',
+        content: text,
+        timestamp: new Date()
+      }
     }
     setMessages(prev => [...prev, newUserMessage])
 
     try {
-      const bodyToSend = {
-        body: {
-          messages: [
-            {
-              type: 'text',
-              text,
-              from: userName
-            }
-          ],
-          contacts: [
-            {
-              wa_id: userName
-            }
-          ]
+      let bodyToSend
+      if (audioBlob) {
+        const base64Audio = await blobToBase64(audioBlob)
+        bodyToSend = {
+          body: {
+            messages: [{ type: 'audio', audio: base64Audio, from: userName }],
+            contacts: [{ wa_id: userName }]
+          }
+        }
+      } else {
+        bodyToSend = {
+          body: {
+            messages: [{ type: 'text', text, from: userName }],
+            contacts: [{ wa_id: userName }]
+          }
         }
       }
 
-      console.log('Enviando a webhook:', JSON.stringify(bodyToSend, null, 2))
-
       const response = await fetch(N8N_WEBHOOK_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(bodyToSend)
       })
 
-      const responseText = await response.text()
-      console.log('Respuesta del servidor:', responseText)
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${responseText}`)
-      }
-
-      const data: WebhookResponse = JSON.parse(responseText)
+      const data: WebhookResponse = await response.json()
       if (data.success && data.response) {
         const botMessage: Message = {
           type: 'text',
@@ -144,13 +163,7 @@ export default function ChatPage() {
 
     } catch (error) {
       console.error('Error al enviar mensaje:', error)
-      const errorMessage: Message = {
-        type: 'text',
-        sender: 'bot',
-        content: 'Lo siento, ocurrió un error al procesar tu mensaje.',
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => [...prev, { type: 'text', sender: 'bot', content: 'Error al procesar tu mensaje.', timestamp: new Date() }])
     } finally {
       setIsLoading(false)
     }
@@ -163,25 +176,15 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen">
       <div className="bg-blue-500 text-white p-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold">BioGas Agent</h1>
-        <button
-          onClick={handleLogout}
-          className="px-3 py-1 bg-red-500 hover:bg-red-600 rounded-lg text-sm"
-        >
-          Cerrar
-        </button>
+        <h1 className="text-xl font-bold">BioGasAgentic</h1>
+        <div className="flex items-center gap-2">
+          <span className="truncate max-w-[200px] font-semibold" title={userName}>{userName}</span>
+          <button onClick={handleLogout} className="px-3 py-1 bg-red-500 hover:bg-red-600 rounded-lg text-sm">Cerrar</button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-10">
-            <p>¡Bienvenido {userName}! Escribe un mensaje para comenzar la conversación.</p>
-          </div>
-        ) : (
-          messages.map((msg, idx) => (
-            <ChatMessage key={idx} message={msg} />
-          ))
-        )}
+        {messages.length === 0 ? <div className="text-center text-gray-500 mt-10">¡Bienvenido, {userName}! Escribe un mensaje o graba un audio.</div> : messages.map((msg, idx) => <ChatMessage key={idx} message={msg} />)}
       </div>
 
       <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
