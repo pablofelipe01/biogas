@@ -7,7 +7,6 @@ interface AudioPlayerProps {
 
 export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false)
-  const [duration, setDuration] = useState<number>(0) // Duración total del audio
   const [currentTime, setCurrentTime] = useState(0)
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState(false)
@@ -16,11 +15,6 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-
-    // Cargar metadatos del audio (duración)
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration)
-    }
 
     // Cuando el audio está listo para reproducirse
     const handleCanPlay = () => {
@@ -47,29 +41,29 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
       setIsPlaying(false)
     }
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
     audio.addEventListener('canplay', handleCanPlay)
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('ended', handleEnded)
     audio.addEventListener('error', handleError)
 
-    audio.load() // Cargar el audio
+    // Safari a veces necesita una carga explícita
+    audio.load()
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('canplay', handleCanPlay)
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('error', handleError)
     }
-  }, [src])
+  }, [src]) // Recargar cuando cambie la fuente
 
-  // Toggle reproducción
   const togglePlay = () => {
     if (!audioRef.current || !isReady) return
 
-    const playPromise = isPlaying ? audioRef.current.pause() : audioRef.current.play()
-
+    const playPromise = isPlaying 
+      ? audioRef.current.pause() 
+      : audioRef.current.play()
+    
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
@@ -84,14 +78,12 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
     }
   }
 
-  // Formatear tiempo en MM:SS
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60)
     const seconds = Math.floor(time % 60)
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`
   }
 
-  // Determinar el tipo MIME
   const getMimeType = () => {
     if (src.startsWith('blob:')) {
       return 'audio/webm'
@@ -106,15 +98,13 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
     }
   }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
     <div className="w-full my-1">
       <audio ref={audioRef} preload="metadata">
         <source src={src} type={getMimeType()} />
         Tu navegador no soporta la reproducción de audio.
       </audio>
-
+      
       <div 
         className="flex items-center gap-2 w-full"
         style={{ 
@@ -129,7 +119,9 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
           disabled={!isReady || error}
           className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center 
             ${(!isReady || error) ? 'opacity-50' : 'opacity-100'}`}
-          style={{ backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)' }}
+          style={{ 
+            backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)'
+          }}
         >
           {error ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -148,16 +140,11 @@ export function CustomAudioPlayer({ src, isUser }: AudioPlayerProps) {
             </svg>
           )}
         </button>
-
-        <div className="w-full bg-gray-300 h-1 rounded-md overflow-hidden">
-          <div
-            className="bg-blue-500 h-full"
-            style={{ width: `${progress}%` }}
-          ></div>
-        </div>
-
+        
+        <div className="flex-1"></div>
+        
         <div className="text-xs opacity-80 min-w-[42px] text-right">
-          {formatTime(currentTime)} / {formatTime(duration)}
+          {formatTime(currentTime)}
         </div>
       </div>
     </div>
